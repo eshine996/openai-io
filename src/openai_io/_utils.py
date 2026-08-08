@@ -16,10 +16,7 @@ def is_given(value: object) -> bool:
 
 
 def remove_not_given(data: dict[str, Any]) -> dict[str, Any]:
-    """移除请求体中值为 ``NOT_GIVEN`` 的字段。
-
-    调用方未传的参数不应出现在请求体里，否则会覆盖服务端默认值。
-    """
+    """移除请求体中值为 ``NOT_GIVEN`` 的字段。"""
     return {key: value for key, value in data.items() if not isinstance(value, NotGiven)}
 
 

@@ -1,7 +1,7 @@
 """chat.completions 资源（同步与异步）。
 
-``create`` 的入口参数与 openai SDK 的 ``client.chat.completions.create`` 对齐，
-仅 ``messages`` 改为 langchain 风格（见 :mod:`openai_io.messages`）。
+``create`` 的入口参数与 openai SDK 的 ``client.chat.completions.create`` 一致，
+``messages`` 支持 langchain 风格消息（见 :mod:`openai_io.messages`）。
 """
 
 from __future__ import annotations

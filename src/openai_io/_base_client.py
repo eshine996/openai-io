@@ -1,11 +1,9 @@
-"""HTTP 传输层抽象（SOLID：高层资源只依赖本模块的抽象，不接触 httpx 细节）。
+"""HTTP 传输层。
 
-设计：
-- :class:`BaseClient` 是共享基类：持有连接配置，实现认证头、URL 拼接、错误构造、
-  重试决策等纯逻辑。
+- :class:`BaseClient` 持有连接配置，实现认证头、URL 拼接、错误构造、重试决策等逻辑。
 - :class:`SyncAPIClient` 基于 ``httpx.Client``，:class:`AsyncAPIClient` 基于
-  ``httpx.AsyncClient``，各自实现 ``request`` / ``stream`` / 重试循环与连接管理。
-  资源层通过 ``self._client.request(...)`` 与 ``self._client.stream(...)`` 发送请求。
+  ``httpx.AsyncClient``，各自实现 ``request`` / ``stream``、重试循环与连接管理。
+- 资源层通过 ``self._client.request(...)`` 与 ``self._client.stream(...)`` 发请求。
 """
 
 from __future__ import annotations
@@ -37,11 +35,10 @@ from ._utils import merge_headers
 
 __all__ = ["AsyncAPIClient", "BaseClient", "SyncAPIClient"]
 
-#: 可重试的 HTTP 状态码（所有请求都是 POST，重试仅在响应到达前失败或服务端明确
-#: 5xx/限流时进行）。
+#: 可重试的 HTTP 状态码。
 RETRYABLE_STATUS_CODES: Final[frozenset[int]] = frozenset({408, 409, 429, 500, 502, 503, 504})
 
-#: 默认超时（秒），与 openai SDK 一致。
+#: 默认超时（秒）。
 DEFAULT_TIMEOUT: Final[float] = 600.0
 
 #: 默认最大重试次数（不含首次请求）。
@@ -101,11 +98,7 @@ def _extract_error_message(body: object) -> str:
 
 
 class BaseClient:
-    """HTTP 客户端共享逻辑（配置、认证头、URL、错误构造、重试决策）。
-
-    不声明请求发送方法——同步与异步的实现差异较大（返回类型、上下文管理器），
-    由 :class:`SyncAPIClient` / :class:`AsyncAPIClient` 各自提供。
-    """
+    """HTTP 客户端共享逻辑（配置、认证头、URL、错误构造、重试决策）。"""
 
     def __init__(
         self,
@@ -260,7 +253,6 @@ class SyncAPIClient(BaseClient):
                     continue
                 raise _build_status_error(response)
             return response
-        # 不可达：循环至少执行一次，且在耗尽重试次数后要么返回要么抛错
         raise APIConnectionError(request=request, cause=RuntimeError("重试次数耗尽"))
 
     def close(self) -> None:

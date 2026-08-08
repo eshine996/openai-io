@@ -1,6 +1,6 @@
 """异步客户端 :class:`AsyncOpenAI`。
 
-用法与 openai SDK 一致：:
+示例::
 
     import asyncio
 

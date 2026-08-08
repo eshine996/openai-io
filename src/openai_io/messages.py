@@ -1,16 +1,12 @@
-"""langchain 风格的 message 体系（自研轻量实现，不依赖 langchain-core）。
+"""langchain 风格的 message 体系（不依赖 langchain-core）。
 
-设计对齐 langchain 的 :class:`BaseMessage` 层级：
-
-- :class:`BaseMessage` 是抽象基类，持有 ``content`` / ``additional_kwargs`` /
-  ``response_metadata`` / ``name`` / ``id``；``type`` 为 ``ClassVar`` 类变量（消息类别，
-  如 ``"human"`` / ``"ai"`` / ``"tool"``），``_role()`` 抽象方法返回对应的
-  openai role。
+- :class:`BaseMessage` 抽象基类：``content`` / ``additional_kwargs`` /
+  ``response_metadata`` / ``name`` / ``id``；``type`` 为 ``ClassVar``（消息类别，
+  如 ``"human"`` / ``"ai"`` / ``"tool"``），``_role()`` 返回对应的 openai role。
 - 具体类型：``SystemMessage`` / ``HumanMessage`` / ``AIMessage`` /
   ``ToolMessage`` / ``FunctionMessage`` / ``ChatMessage``。
-- :meth:`BaseMessage.to_openai_dict` 把消息转换为 openai API 请求格式，
-  :func:`to_openai_messages` 接受 ``BaseMessage`` 与原始 ``dict`` 混合列表，
-  降低从原生 openai SDK 迁移的成本。
+- :meth:`BaseMessage.to_openai_dict` 转 openai 请求格式；:func:`to_openai_messages`
+  接受 ``BaseMessage`` 与原始 ``dict`` 混合列表。
 """
 
 from __future__ import annotations
@@ -72,9 +68,7 @@ class BaseMessage(BaseModel, ABC):
     name: str | None = None
     id: str | None = None
 
-    #: 消息类别标识（langchain 风格，如 "human" / "ai" / "tool"）。
-    #: 注意：pydantic 模型内定义 @property 会让 __init__ 退化为仅关键字参数，
-    #: 因此这里用 ClassVar（与 langchain 一致）。
+    #: 消息类别标识（如 "human" / "ai" / "tool"）。
     type: ClassVar[str]
 
     @abstractmethod
@@ -185,6 +179,6 @@ def to_openai_messages(messages: Iterable[MessageLike]) -> list[dict[str, Any]]:
         if isinstance(message, BaseMessage):
             result.append(message.to_openai_dict())
         else:
-            # 类型上此处必为 Mapping[str, Any]（非法输入会在 dict() 时抛错）
+            # 直接转 dict：非法输入会在 dict() 时报错
             result.append(dict(message))
     return result

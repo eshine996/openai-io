@@ -11,7 +11,7 @@ from ..types.embedding import CreateEmbeddingResponse
 
 __all__ = ["AsyncEmbeddings", "EmbeddingInput", "Embeddings"]
 
-#: embeddings 的 input 类型（与 openai SDK 一致）。
+#: embeddings 的 input 类型。
 type EmbeddingInput = str | Iterable[str] | Iterable[int] | Iterable[Iterable[int]]
 
 

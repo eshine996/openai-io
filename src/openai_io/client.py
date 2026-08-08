@@ -1,6 +1,6 @@
 """同步客户端 :class:`OpenAI`。
 
-用法与 openai SDK 一致：:
+示例::
 
     from openai_io import OpenAI
     from openai_io.messages import HumanMessage

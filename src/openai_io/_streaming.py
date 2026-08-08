@@ -27,7 +27,7 @@ def _iter_sse_events(response: httpx.Response) -> Iterator[dict[str, Any]]:
             try:
                 yield json.loads(payload)
             except json.JSONDecodeError:
-                # 忽略无法解析的行，保持流健壮
+                # 跳过解析失败的行
                 continue
 
 

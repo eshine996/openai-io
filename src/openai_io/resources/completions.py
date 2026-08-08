@@ -13,7 +13,7 @@ from ..types.completion import Completion, CompletionChunk
 
 __all__ = ["AsyncCompletions", "Completions", "PromptInput"]
 
-#: completions 的 prompt 输入类型（与 openai SDK 一致）。
+#: completions 的 prompt 输入类型。
 type PromptInput = str | Iterable[str] | Iterable[int] | Iterable[Iterable[int]]
 
 
