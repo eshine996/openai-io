@@ -8,13 +8,12 @@
 
 ## 特性
 
-- 🪶 轻量：仅依赖 `httpx` + `pydantic`，无其他重量级依赖
-- 🔀 同步 / 异步双客户端（`OpenAI` / `AsyncOpenAI`）
-- 💬 langchain 风格的 message 体系：`SystemMessage` / `HumanMessage` / `AIMessage` /
-  `ToolMessage` / `FunctionMessage` / `ChatMessage`（自研轻量实现，不依赖 langchain-core）
-- 🧵 流式输出（SSE）：`stream=True` 返回 `Stream` / `AsyncStream` 迭代器
-- 🛡️ 完整类型注解：`pyright --strict` 0 错误，`ruff` 全绿
-- 🔁 自动重试（指数退避 + 抖动）、异常体系与 openai SDK 一致
+- 轻量：只依赖 `httpx` 和 `pydantic`
+- 同步 `OpenAI` 与异步 `AsyncOpenAI` 双客户端
+- langchain 风格 message：`SystemMessage` / `HumanMessage` / `AIMessage` /
+  `ToolMessage` / `FunctionMessage` / `ChatMessage`（自研实现，不依赖 langchain-core）
+- 流式输出（SSE）：`stream=True` 返回可迭代的 `Stream` / `AsyncStream`
+- 异常体系与 openai SDK 对齐，自动重试（指数退避 + 抖动）
 
 ## 安装
 
