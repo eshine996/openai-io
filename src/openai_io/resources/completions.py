@@ -2,26 +2,52 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from typing import Literal, overload
+from collections.abc import Iterable, Mapping
+from typing import Any, Literal, NotRequired, TypedDict, overload
 
 from .._base_client import AsyncAPIClient, SyncAPIClient
 from .._streaming import AsyncStream, Stream
 from .._types import NOT_GIVEN, NotGiven
-from .._utils import remove_not_given
+from .._utils import normalize_iterable_input, remove_not_given
 from ..types.completion import Completion, CompletionChunk
 
 __all__ = ["AsyncCompletions", "Completions", "PromptInput"]
 
 #: completions 的 prompt 输入类型。
-type PromptInput = str | Iterable[str] | Iterable[int] | Iterable[Iterable[int]]
+type PromptInput = str | Iterable[str] | Iterable[int] | Iterable[Iterable[int]] | None
 
 
-def _normalize_prompt(prompt: PromptInput) -> str | list[str] | list[int] | list[list[int]]:
-    """把 prompt 转为可 JSON 序列化的形式。"""
-    if isinstance(prompt, str):
-        return prompt
-    return list(prompt)  # type: ignore[return-value]
+class StreamOptions(TypedDict):
+    include_usage: NotRequired[bool]
+    include_obfuscation: NotRequired[bool]
+
+
+_BODY_FIELDS = (
+    "model",
+    "prompt",
+    "stream",
+    "stream_options",
+    "suffix",
+    "max_tokens",
+    "temperature",
+    "top_p",
+    "n",
+    "stop",
+    "presence_penalty",
+    "frequency_penalty",
+    "logit_bias",
+    "user",
+    "echo",
+    "best_of",
+    "seed",
+    "logprobs",
+)
+
+
+def _build_create_body(params: Mapping[str, Any]) -> dict[str, Any]:
+    body = {field: params[field] for field in _BODY_FIELDS}
+    body["prompt"] = normalize_iterable_input(body["prompt"])
+    return remove_not_given(body)
 
 
 class Completions:
@@ -37,6 +63,7 @@ class Completions:
         model: str,
         prompt: PromptInput,
         stream: Literal[True],
+        stream_options: StreamOptions | NotGiven | None = NOT_GIVEN,
         suffix: str | NotGiven = NOT_GIVEN,
         max_tokens: int | NotGiven = NOT_GIVEN,
         temperature: float | NotGiven = NOT_GIVEN,
@@ -60,6 +87,7 @@ class Completions:
         model: str,
         prompt: PromptInput,
         stream: Literal[False] | None = None,
+        stream_options: StreamOptions | NotGiven | None = NOT_GIVEN,
         suffix: str | NotGiven = NOT_GIVEN,
         max_tokens: int | NotGiven = NOT_GIVEN,
         temperature: float | NotGiven = NOT_GIVEN,
@@ -82,6 +110,7 @@ class Completions:
         model: str,
         prompt: PromptInput,
         stream: bool | NotGiven | None = NOT_GIVEN,
+        stream_options: StreamOptions | NotGiven | None = NOT_GIVEN,
         suffix: str | NotGiven = NOT_GIVEN,
         max_tokens: int | NotGiven = NOT_GIVEN,
         temperature: float | NotGiven = NOT_GIVEN,
@@ -97,27 +126,7 @@ class Completions:
         seed: int | NotGiven = NOT_GIVEN,
         logprobs: int | NotGiven = NOT_GIVEN,
     ) -> Stream[CompletionChunk] | Completion:
-        body = remove_not_given(
-            {
-                "model": model,
-                "prompt": _normalize_prompt(prompt),
-                "stream": stream,
-                "suffix": suffix,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "top_p": top_p,
-                "n": n,
-                "stop": stop,
-                "presence_penalty": presence_penalty,
-                "frequency_penalty": frequency_penalty,
-                "logit_bias": logit_bias,
-                "user": user,
-                "echo": echo,
-                "best_of": best_of,
-                "seed": seed,
-                "logprobs": logprobs,
-            }
-        )
+        body = _build_create_body(locals())
         if stream is True:
             response = self._client.stream("post", "/completions", json_body=body)
             return Stream(cast_to=CompletionChunk, response=response)
@@ -138,6 +147,7 @@ class AsyncCompletions:
         model: str,
         prompt: PromptInput,
         stream: Literal[True],
+        stream_options: StreamOptions | NotGiven | None = NOT_GIVEN,
         suffix: str | NotGiven = NOT_GIVEN,
         max_tokens: int | NotGiven = NOT_GIVEN,
         temperature: float | NotGiven = NOT_GIVEN,
@@ -161,6 +171,7 @@ class AsyncCompletions:
         model: str,
         prompt: PromptInput,
         stream: Literal[False] | None = None,
+        stream_options: StreamOptions | NotGiven | None = NOT_GIVEN,
         suffix: str | NotGiven = NOT_GIVEN,
         max_tokens: int | NotGiven = NOT_GIVEN,
         temperature: float | NotGiven = NOT_GIVEN,
@@ -183,6 +194,7 @@ class AsyncCompletions:
         model: str,
         prompt: PromptInput,
         stream: bool | NotGiven | None = NOT_GIVEN,
+        stream_options: StreamOptions | NotGiven | None = NOT_GIVEN,
         suffix: str | NotGiven = NOT_GIVEN,
         max_tokens: int | NotGiven = NOT_GIVEN,
         temperature: float | NotGiven = NOT_GIVEN,
@@ -198,27 +210,7 @@ class AsyncCompletions:
         seed: int | NotGiven = NOT_GIVEN,
         logprobs: int | NotGiven = NOT_GIVEN,
     ) -> AsyncStream[CompletionChunk] | Completion:
-        body = remove_not_given(
-            {
-                "model": model,
-                "prompt": _normalize_prompt(prompt),
-                "stream": stream,
-                "suffix": suffix,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "top_p": top_p,
-                "n": n,
-                "stop": stop,
-                "presence_penalty": presence_penalty,
-                "frequency_penalty": frequency_penalty,
-                "logit_bias": logit_bias,
-                "user": user,
-                "echo": echo,
-                "best_of": best_of,
-                "seed": seed,
-                "logprobs": logprobs,
-            }
-        )
+        body = _build_create_body(locals())
         if stream is True:
             response = await self._client.stream("post", "/completions", json_body=body)
             return AsyncStream(cast_to=CompletionChunk, response=response)

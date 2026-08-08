@@ -1,10 +1,4 @@
-"""HTTP 传输层。
-
-- :class:`BaseClient` 持有连接配置，实现认证头、URL 拼接、错误构造、重试决策等逻辑。
-- :class:`SyncAPIClient` 基于 ``httpx.Client``，:class:`AsyncAPIClient` 基于
-  ``httpx.AsyncClient``，各自实现 ``request`` / ``stream``、重试循环与连接管理。
-- 资源层通过 ``self._client.request(...)`` 与 ``self._client.stream(...)`` 发请求。
-"""
+"""基于 httpx 的同步与异步传输层。"""
 
 from __future__ import annotations
 
@@ -117,9 +111,6 @@ class BaseClient:
         self.max_retries = max_retries
         self.default_headers = dict(default_headers or {})
 
-    # ------------------------------------------------------------------
-    # 请求头
-    # ------------------------------------------------------------------
     @property
     def auth_headers(self) -> dict[str, str]:
         headers: dict[str, str] = {}
@@ -143,18 +134,12 @@ class BaseClient:
     def _build_stream_headers(self, headers: Headers | None = None) -> dict[str, str]:
         return merge_headers(self._build_headers(headers), {"Accept": "text/event-stream"})
 
-    # ------------------------------------------------------------------
-    # URL 处理
-    # ------------------------------------------------------------------
     def _full_url(self, url: str) -> str:
         """把相对路径拼上 base_url；绝对 URL 原样返回。"""
         if url.startswith(("http://", "https://")):
             return url
         return f"{self.base_url}{url}"
 
-    # ------------------------------------------------------------------
-    # 重试决策（纯逻辑）
-    # ------------------------------------------------------------------
     @staticmethod
     def _should_retry(response: httpx.Response | None) -> bool:
         return response is not None and response.status_code in RETRYABLE_STATUS_CODES
@@ -251,6 +236,15 @@ class SyncAPIClient(BaseClient):
                     response.close()
                     time.sleep(self._retry_delay(attempt))
                     continue
+                if stream:
+                    try:
+                        response.read()
+                    except httpx.TimeoutException as exc:
+                        response.close()
+                        raise APITimeoutError(request=request, cause=exc) from exc
+                    except httpx.TransportError as exc:
+                        response.close()
+                        raise APIConnectionError(request=request, cause=exc) from exc
                 raise _build_status_error(response)
             return response
         raise APIConnectionError(request=request, cause=RuntimeError("重试次数耗尽"))
@@ -353,6 +347,15 @@ class AsyncAPIClient(BaseClient):
                     await response.aclose()
                     await asyncio.sleep(self._retry_delay(attempt))
                     continue
+                if stream:
+                    try:
+                        await response.aread()
+                    except httpx.TimeoutException as exc:
+                        await response.aclose()
+                        raise APITimeoutError(request=request, cause=exc) from exc
+                    except httpx.TransportError as exc:
+                        await response.aclose()
+                        raise APIConnectionError(request=request, cause=exc) from exc
                 raise _build_status_error(response)
             return response
         raise APIConnectionError(request=request, cause=RuntimeError("重试次数耗尽"))

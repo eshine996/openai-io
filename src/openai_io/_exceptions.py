@@ -1,20 +1,4 @@
-"""异常类与 openai SDK 同名同层级。
-
-结构::
-
-    OpenAIError
-    └── APIError
-        ├── APIConnectionError
-        ├── APITimeoutError
-        └── APIStatusError (带 HTTP 状态码)
-            ├── BadRequestError          (400)
-            ├── AuthenticationError      (401)
-            ├── PermissionDeniedError    (403)
-            ├── NotFoundError            (404)
-            ├── ConflictError            (409)
-            ├── UnprocessableEntityError (422)
-            └── RateLimitError           (429)
-"""
+"""请求、连接和 HTTP 状态异常。"""
 
 from __future__ import annotations
 

@@ -1,31 +1,26 @@
 # openai-io
 
-轻量级的 OpenAI 大模型 IO 库：只保留 `chat.completions` / `completions` / `embeddings`
-三件套，同步（`OpenAI`）与异步（`AsyncOpenAI`）双客户端，传输层基于 `httpx`，
-数据模型基于 `pydantic` v2。
+一个只封装 `chat.completions`、`completions` 和 `embeddings` 的 OpenAI 客户端。
+提供同步与异步接口，使用 `httpx` 发送请求，使用 Pydantic v2 解析响应。
 
-## 为什么不用官方 SDK
+## 为什么写这个库
 
-官方 SDK 功能全，但用起来有几处不太顺手：
+我的项目只用到模型调用，不需要官方 SDK 覆盖的全部资源。这个库主要解决两个问题：
 
-- 太重。模型 IO 只占它的一小部分，`images`、`audio`、`files`、`batch`、`assistants`
-  这些资源平时根本用不到，依赖和包体积都跟着上去了。
-- `messages` 是 TypedDict，`{"role": "user", "content": "..."}` 全靠手写，没有对象、
-  没有自动补全，多轮对话拼起来很啰嗦。
-- 类型太绕：`NotGiven` 哨兵、一长串 Union、各种 `*_Param`，IDE 提示经常是几行
-  联合类型，报错也不好读。
+- 缩小接口范围，只维护模型调用需要的资源。
+- 用消息对象组织多轮对话，同时允许直接传原始 `dict`。
 
-这个库只做 chat / completions / embeddings 三件事，`messages` 换成 langchain 风格的
-对象，接口和官方 SDK 保持一致，迁移成本低。
+资源路径和常用参数沿用 OpenAI API 的命名，但这不是官方 SDK 的完整替代品。
 
 ## 特性
 
-- 轻量：只依赖 `httpx` 和 `pydantic`
+- 运行时只依赖 `httpx` 和 `pydantic`
 - 同步 `OpenAI` 与异步 `AsyncOpenAI` 双客户端
-- langchain 风格 message：`SystemMessage` / `HumanMessage` / `AIMessage` /
+- 消息对象：`DeveloperMessage` / `SystemMessage` / `HumanMessage` / `AIMessage` /
   `ToolMessage` / `FunctionMessage` / `ChatMessage`（不依赖 langchain-core）
 - 流式输出（SSE）：`stream=True` 返回可迭代的 `Stream` / `AsyncStream`
-- 异常体系与 openai SDK 对齐，自动重试（指数退避 + 抖动）
+- 为常见 HTTP 状态和连接错误提供独立异常类型
+- 对限流、服务端错误等状态执行有限次数的重试
 
 ## 安装
 
@@ -119,10 +114,13 @@ messages = [
 
 - `BaseMessage` 抽象基类：`content` / `additional_kwargs` / `response_metadata` /
   `name` / `id`，`type` 为类别标识（`"human"` / `"ai"` / `"tool"` …）
-- `content` 支持多模态 part 列表（`[{"type": "text", ...}, {"type": "image_url", ...}]`）
-- **兼容原始 dict**：`messages` 可以混合传入 `BaseMessage` 与 `{"role": ..., "content": ...}`，
-  迁移时无需一次性替换全部代码
-- pydantic 2.13 起构造参数为关键字形式：`HumanMessage(content="你好")`
+- `content` 支持结构化多模态 part 列表：`TextContentPart`、`ImageContentPart`、
+  `InputAudioContentPart`、`FileContentPart` 和 `RefusalContentPart`；各 part 的字段有
+  明确的类型提示。`HumanMessage` 支持文本、图片、音频和文件，`DeveloperMessage` /
+  `SystemMessage` / `ToolMessage` 只支持文本，`AIMessage` 还支持拒答 part，并允许在工具调用时使用
+  `content=None`。
+- `messages` 可以混合传入 `BaseMessage` 与 `{"role": ..., "content": ...}`。
+- 消息使用关键字参数构造，例如 `HumanMessage(content="你好")`。
 
 ## 与 openai SDK 的对应关系
 
@@ -133,12 +131,20 @@ messages = [
 | `client.completions.create(...)` | `client.completions.create(...)` |
 | `client.embeddings.create(...)` | `client.embeddings.create(...)` |
 | `from openai import AsyncOpenAI` | `from openai_io import AsyncOpenAI` |
-| `openai.OpenAIError` 等异常 | `openai_io.OpenAIError` 等，类名一致 |
-| 请求参数（`temperature` / `max_tokens` / `tools` / …） | 同名同语义；未传参不写入请求体（`NotGiven` 哨兵语义一致） |
+| 常见 API 异常 | `openai_io` 提供相近名称的异常类型 |
+| 常用请求参数 | 沿用 OpenAI API 的字段名；未传参数不会写入请求体 |
 | TypedDict messages | langchain 风格 `BaseMessage`（也可传 dict） |
 
-`create` 的入口参数与 openai SDK 对齐，含 `stream` / `stream_options` / `tools` /
-`tool_choice` / `response_format` / `seed` 等；未显式传参的字段不会出现在请求体中。
+本库只声明当前维护的常用参数，不保证与任一版本的官方 SDK 签名完全相同。未声明的
+API 参数不能直接传给 `create`。
+
+字段定义以 OpenAI 的 [Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)、
+[Completions](https://developers.openai.com/api/reference/resources/completions/methods/create) 和
+[Embeddings](https://developers.openai.com/api/reference/resources/embeddings/methods/create) 文档为准。
+
+响应会解析为 Pydantic 模型。已声明的嵌套字段（例如 usage、logprobs、引用和工具调用）
+也会继续解析为模型；API 新增但本库尚未声明的字段保留在 `model_extra`。Embeddings 默认
+返回浮点数组；显式使用 `encoding_format="base64"` 时，`embedding` 保留 base64 字符串。
 
 ## 开发
 

@@ -1,22 +1,4 @@
-"""异步客户端 :class:`AsyncOpenAI`。
-
-示例::
-
-    import asyncio
-
-    from openai_io import AsyncOpenAI
-    from openai_io.messages import HumanMessage
-
-    async def main() -> None:
-        client = AsyncOpenAI(api_key="sk-...")
-        resp = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[HumanMessage(content="你好")],
-        )
-        print(resp.choices[0].message.content)
-
-    asyncio.run(main())
-"""
+"""异步客户端。"""
 
 from __future__ import annotations
 

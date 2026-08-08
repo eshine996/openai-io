@@ -1,17 +1,4 @@
-"""同步客户端 :class:`OpenAI`。
-
-示例::
-
-    from openai_io import OpenAI
-    from openai_io.messages import HumanMessage
-
-    client = OpenAI(api_key="sk-...")
-    resp = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[HumanMessage(content="你好")],
-    )
-    print(resp.choices[0].message.content)
-"""
+"""同步客户端。"""
 
 from __future__ import annotations
 

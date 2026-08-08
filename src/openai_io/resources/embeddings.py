@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from typing import Any, Literal
 
 from .._base_client import AsyncAPIClient, SyncAPIClient
 from .._types import NOT_GIVEN, NotGiven
-from .._utils import remove_not_given
+from .._utils import normalize_iterable_input, remove_not_given
 from ..types.embedding import CreateEmbeddingResponse
 
 __all__ = ["AsyncEmbeddings", "EmbeddingInput", "Embeddings"]
@@ -15,11 +16,13 @@ __all__ = ["AsyncEmbeddings", "EmbeddingInput", "Embeddings"]
 type EmbeddingInput = str | Iterable[str] | Iterable[int] | Iterable[Iterable[int]]
 
 
-def _normalize_input(value: EmbeddingInput) -> str | list[str] | list[int] | list[list[int]]:
-    """把 input 转为可 JSON 序列化的形式。"""
-    if isinstance(value, str):
-        return value
-    return list(value)  # type: ignore[return-value]
+_BODY_FIELDS = ("model", "input", "encoding_format", "dimensions", "user")
+
+
+def _build_create_body(params: Mapping[str, Any]) -> dict[str, Any]:
+    body = {field: params[field] for field in _BODY_FIELDS}
+    body["input"] = normalize_iterable_input(body["input"])
+    return remove_not_given(body)
 
 
 class Embeddings:
@@ -33,19 +36,11 @@ class Embeddings:
         *,
         model: str,
         input: EmbeddingInput,
-        encoding_format: str | NotGiven = NOT_GIVEN,
+        encoding_format: Literal["float", "base64"] | NotGiven = NOT_GIVEN,
         dimensions: int | NotGiven = NOT_GIVEN,
         user: str | NotGiven = NOT_GIVEN,
     ) -> CreateEmbeddingResponse:
-        body = remove_not_given(
-            {
-                "model": model,
-                "input": _normalize_input(input),
-                "encoding_format": encoding_format,
-                "dimensions": dimensions,
-                "user": user,
-            }
-        )
+        body = _build_create_body(locals())
         response = self._client.request("post", "/embeddings", json_body=body)
         return CreateEmbeddingResponse.model_validate_json(response.content)
 
@@ -61,18 +56,10 @@ class AsyncEmbeddings:
         *,
         model: str,
         input: EmbeddingInput,
-        encoding_format: str | NotGiven = NOT_GIVEN,
+        encoding_format: Literal["float", "base64"] | NotGiven = NOT_GIVEN,
         dimensions: int | NotGiven = NOT_GIVEN,
         user: str | NotGiven = NOT_GIVEN,
     ) -> CreateEmbeddingResponse:
-        body = remove_not_given(
-            {
-                "model": model,
-                "input": _normalize_input(input),
-                "encoding_format": encoding_format,
-                "dimensions": dimensions,
-                "user": user,
-            }
-        )
+        body = _build_create_body(locals())
         response = await self._client.request("post", "/embeddings", json_body=body)
         return CreateEmbeddingResponse.model_validate_json(response.content)

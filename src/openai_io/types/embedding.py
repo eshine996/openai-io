@@ -2,27 +2,27 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from ._base import APIResponseModel
 
 __all__ = ["CreateEmbeddingResponse", "Embedding", "EmbeddingUsage"]
 
 
-class EmbeddingUsage(BaseModel):
+class EmbeddingUsage(APIResponseModel):
     """token 用量统计。"""
 
     prompt_tokens: int
     total_tokens: int
 
 
-class Embedding(BaseModel):
+class Embedding(APIResponseModel):
     """单个文本的向量。"""
 
     index: int
     object: str = "embedding"
-    embedding: list[float]
+    embedding: list[float] | str
 
 
-class CreateEmbeddingResponse(BaseModel):
+class CreateEmbeddingResponse(APIResponseModel):
     """embeddings.create 的完整响应。"""
 
     object: str = "list"

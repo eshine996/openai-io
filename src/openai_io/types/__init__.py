@@ -1,30 +1,53 @@
 """对外暴露的响应类型。"""
 
 from .chat import (
+    Annotation,
     ChatCompletion,
+    ChatCompletionAudio,
     ChatCompletionChunk,
     ChatCompletionChunkChoice,
     ChatCompletionChunkDelta,
     ChatCompletionMessage,
+    ChatCompletionTokenLogprob,
     Choice,
+    ChoiceLogprobs,
+    CompletionTokensDetails,
     CompletionUsage,
+    CustomToolDelta,
+    FunctionCallDelta,
+    PromptTokensDetails,
+    ToolCallDelta,
+    TopLogprob,
+    URLCitation,
 )
-from .completion import Completion, CompletionChoice, CompletionChunk, CompletionChunkChoice
+from .completion import Completion, CompletionChoice, CompletionChunk, CompletionChunkChoice, CompletionLogprobs
 from .embedding import CreateEmbeddingResponse, Embedding, EmbeddingUsage
 
 __all__ = [
+    "Annotation",
     "ChatCompletion",
+    "ChatCompletionAudio",
     "ChatCompletionChunk",
     "ChatCompletionChunkChoice",
     "ChatCompletionChunkDelta",
     "ChatCompletionMessage",
+    "ChatCompletionTokenLogprob",
     "Choice",
+    "ChoiceLogprobs",
     "Completion",
     "CompletionChoice",
     "CompletionChunk",
     "CompletionChunkChoice",
+    "CompletionLogprobs",
+    "CompletionTokensDetails",
     "CompletionUsage",
     "CreateEmbeddingResponse",
+    "CustomToolDelta",
     "Embedding",
     "EmbeddingUsage",
+    "FunctionCallDelta",
+    "PromptTokensDetails",
+    "ToolCallDelta",
+    "TopLogprob",
+    "URLCitation",
 ]

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import array
+import base64
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from typing import Any
 
 import httpx
 import pytest
@@ -21,9 +24,10 @@ from openai_io import (
     UnprocessableEntityError,
 )
 from openai_io.messages import HumanMessage
+from openai_io.types import ChatCompletion, ChatCompletionChunk, Completion
 from tests.conftest import TEST_API_KEY, TEST_BASE_URL, Handler
 
-CHAT_RESPONSE = {
+CHAT_RESPONSE: dict[str, Any] = {
     "id": "chatcmpl-1",
     "object": "chat.completion",
     "created": 1700000000,
@@ -37,6 +41,11 @@ CHAT_RESPONSE = {
     ],
     "usage": {"prompt_tokens": 5, "completion_tokens": 4, "total_tokens": 9},
 }
+
+
+class StreamingErrorBody(httpx.SyncByteStream):
+    def __iter__(self) -> Iterator[bytes]:
+        yield b'{"error":{"message":"stream request failed"}}'
 
 
 def test_chat_completion_create(sync_client: Callable[[Handler], OpenAI]) -> None:
@@ -121,6 +130,99 @@ def test_chat_completion_stream(sync_client: Callable[[Handler], OpenAI]) -> Non
     assert chunks[1].choices[0].finish_reason == "stop"
 
 
+def test_chat_response_nested_fields_are_structured() -> None:
+    response = ChatCompletion.model_validate(
+        {
+            "id": "chatcmpl-1",
+            "created": 1,
+            "model": "m",
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "annotations": [
+                            {
+                                "type": "url_citation",
+                                "url_citation": {
+                                    "start_index": 0,
+                                    "end_index": 4,
+                                    "title": "Docs",
+                                    "url": "https://example.com",
+                                },
+                            }
+                        ],
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "custom",
+                                "custom": {"name": "shell", "input": "pwd"},
+                            }
+                        ],
+                    },
+                    "logprobs": {
+                        "content": [
+                            {
+                                "token": "ok",
+                                "bytes": [111, 107],
+                                "logprob": -0.1,
+                                "top_logprobs": [],
+                            }
+                        ]
+                    },
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 2,
+                "completion_tokens": 1,
+                "total_tokens": 3,
+                "prompt_tokens_details": {"cached_tokens": 1},
+            },
+        }
+    )
+
+    citation = response.choices[0].message.annotations
+    assert citation is not None
+    assert citation[0].url_citation.title == "Docs"
+    assert response.choices[0].logprobs is not None
+    assert response.choices[0].logprobs.content is not None
+    assert response.choices[0].logprobs.content[0].bytes == [111, 107]
+    assert response.usage is not None
+    assert response.usage.prompt_tokens_details is not None
+    assert response.usage.prompt_tokens_details.cached_tokens == 1
+
+
+def test_chat_chunk_tool_call_delta_is_structured() -> None:
+    chunk = ChatCompletionChunk.model_validate(
+        {
+            "id": "chatcmpl-1",
+            "created": 1,
+            "model": "m",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "type": "function",
+                                "function": {"arguments": '{"city"'},
+                            }
+                        ]
+                    },
+                }
+            ],
+        }
+    )
+
+    tool_calls = chunk.choices[0].delta.tool_calls
+    assert tool_calls is not None
+    assert tool_calls[0].function is not None
+    assert tool_calls[0].function.arguments == '{"city"'
+
+
 def test_completions_create(sync_client: Callable[[Handler], OpenAI]) -> None:
     captured: dict[str, object] = {}
 
@@ -135,17 +237,50 @@ def test_completions_create(sync_client: Callable[[Handler], OpenAI]) -> None:
                 "model": "text-davinci-003",
                 "choices": [{"text": "42", "index": 0, "finish_reason": "stop"}],
                 "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3},
+                "system_fingerprint": "fp_123",
             },
         )
 
     client = sync_client(handler)
-    response = client.completions.create(model="text-davinci-003", prompt="1+1=?")
+    response = client.completions.create(
+        model="text-davinci-003",
+        prompt="1+1=?",
+        stream_options={"include_usage": True},
+    )
 
     assert response.choices[0].text == "42"
+    assert response.system_fingerprint == "fp_123"
     body = captured["body"]
     assert isinstance(body, dict)
     assert body["prompt"] == "1+1=?"
     assert body["model"] == "text-davinci-003"
+    assert body["stream_options"] == {"include_usage": True}
+
+
+def test_completion_logprobs_are_structured() -> None:
+    response = Completion.model_validate(
+        {
+            "id": "cmpl-1",
+            "created": 1,
+            "model": "m",
+            "choices": [
+                {
+                    "index": 0,
+                    "text": "ok",
+                    "finish_reason": "stop",
+                    "logprobs": {
+                        "text_offset": [0],
+                        "token_logprobs": [-0.1],
+                        "tokens": ["ok"],
+                        "top_logprobs": [{"ok": -0.1}],
+                    },
+                }
+            ],
+        }
+    )
+
+    assert response.choices[0].logprobs is not None
+    assert response.choices[0].logprobs.tokens == ["ok"]
 
 
 def test_completions_prompt_generator_normalized(sync_client: Callable[[Handler], OpenAI]) -> None:
@@ -170,6 +305,23 @@ def test_completions_prompt_generator_normalized(sync_client: Callable[[Handler]
     body = captured["body"]
     assert isinstance(body, dict)
     assert body["prompt"] == [1, 2, 3]
+
+
+def test_completions_nested_generators_normalized(sync_client: Callable[[Handler], OpenAI]) -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"id": "cmpl-1", "created": 0, "model": "m", "choices": []},
+        )
+
+    client = sync_client(handler)
+    client.completions.create(model="m", prompt=(iter([1, 2]) for _ in range(2)))
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert body["prompt"] == [[1, 2], [1, 2]]
 
 
 def test_embeddings_create(sync_client: Callable[[Handler], OpenAI]) -> None:
@@ -219,6 +371,51 @@ def test_embeddings_input_generator_normalized(sync_client: Callable[[Handler], 
     assert body["input"] == ["a", "b"]
 
 
+def test_embeddings_nested_generators_normalized(sync_client: Callable[[Handler], OpenAI]) -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "object": "list",
+                "data": [],
+                "model": "text-embedding-3-small",
+                "usage": {"prompt_tokens": 0, "total_tokens": 0},
+            },
+        )
+
+    client = sync_client(handler)
+    client.embeddings.create(model="text-embedding-3-small", input=(iter([1, 2]) for _ in range(2)))
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert body["input"] == [[1, 2], [1, 2]]
+
+
+def test_embeddings_explicit_base64_response_is_preserved(sync_client: Callable[[Handler], OpenAI]) -> None:
+    encoded = base64.b64encode(array.array("f", [0.25, 0.5]).tobytes()).decode()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "object": "list",
+                "data": [{"object": "embedding", "index": 0, "embedding": encoded}],
+                "model": "text-embedding-3-small",
+                "usage": {"prompt_tokens": 1, "total_tokens": 1},
+            },
+        )
+
+    client = sync_client(handler)
+    response = client.embeddings.create(
+        model="text-embedding-3-small",
+        input="hello",
+        encoding_format="base64",
+    )
+    assert response.data[0].embedding == encoded
+
+
 def test_error_status_mapping(sync_client: Callable[[Handler], OpenAI]) -> None:
     cases: list[tuple[int, type[Exception]]] = [
         (400, BadRequestError),
@@ -238,6 +435,37 @@ def test_error_status_mapping(sync_client: Callable[[Handler], OpenAI]) -> None:
         client = sync_client(handler)
         with pytest.raises(expected):
             client.chat.completions.create(model="m", messages=[HumanMessage(content="hi")])
+
+
+def test_streaming_http_error_is_mapped_and_closed() -> None:
+    responses: list[httpx.Response] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        response = httpx.Response(400, stream=StreamingErrorBody(), headers={"content-type": "application/json"})
+        responses.append(response)
+        return response
+
+    http_client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = OpenAI(api_key="test-key", max_retries=0, http_client=http_client)
+    with pytest.raises(BadRequestError, match="stream request failed"):
+        client.chat.completions.create(model="m", messages=[HumanMessage(content="hi")], stream=True)
+    assert responses[0].is_closed
+
+
+def test_response_models_preserve_unknown_fields(sync_client: Callable[[Handler], OpenAI]) -> None:
+    response_data = {**CHAT_RESPONSE, "service_tier": "priority"}
+    response_data["choices"] = [{**CHAT_RESPONSE["choices"][0], "new_choice_field": "kept"}]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=response_data)
+
+    response = sync_client(handler).chat.completions.create(
+        model="m",
+        messages=[HumanMessage(content="hi")],
+    )
+    assert response.service_tier == "priority"
+    assert response.model_extra == {}
+    assert response.choices[0].model_extra == {"new_choice_field": "kept"}
 
 
 def test_retry_on_429_then_success(sync_client: Callable[[Handler], OpenAI]) -> None:

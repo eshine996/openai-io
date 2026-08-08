@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from openai_io import (
     AIMessage,
     ChatMessage,
+    CustomTool,
+    CustomToolCall,
+    DeveloperMessage,
+    FileContentPart,
     FunctionCall,
     FunctionMessage,
     HumanMessage,
+    ImageContentPart,
+    InputAudioContentPart,
     SystemMessage,
+    TextContentPart,
     ToolCall,
     ToolMessage,
     to_openai_messages,
@@ -27,6 +35,13 @@ def test_system_message() -> None:
     assert SystemMessage(content="你是助手").to_openai_dict() == {"role": "system", "content": "你是助手"}
 
 
+def test_developer_message() -> None:
+    assert DeveloperMessage(content="遵循项目约定").to_openai_dict() == {
+        "role": "developer",
+        "content": "遵循项目约定",
+    }
+
+
 def test_ai_message_with_tool_calls() -> None:
     message = AIMessage(
         content="让我查一下天气",
@@ -40,9 +55,29 @@ def test_ai_message_with_tool_calls() -> None:
     assert data["tool_calls"][0]["function"]["name"] == "get_weather"  # type: ignore[index]
 
 
+def test_ai_message_with_tool_calls_allows_null_content() -> None:
+    message = AIMessage(
+        content=None,
+        tool_calls=[ToolCall(id="call_1", function=FunctionCall(name="get_weather", arguments="{}"))],
+    )
+    assert message.to_openai_dict()["content"] is None
+
+
+def test_ai_message_with_custom_tool_call() -> None:
+    message = AIMessage(tool_calls=[CustomToolCall(id="call_1", custom=CustomTool(name="shell", input="pwd"))])
+    assert message.to_openai_dict()["tool_calls"] == [
+        {"id": "call_1", "type": "custom", "custom": {"name": "shell", "input": "pwd"}}
+    ]
+
+
 def test_tool_message() -> None:
     message = ToolMessage(content="晴，25°C", tool_call_id="call_1")
     assert message.to_openai_dict() == {"role": "tool", "content": "晴，25°C", "tool_call_id": "call_1"}
+
+
+def test_tool_message_requires_tool_call_id() -> None:
+    with pytest.raises(ValidationError):
+        ToolMessage(content="ok")  # type: ignore[call-arg]
 
 
 def test_tool_message_artifact_not_serialized() -> None:
@@ -57,6 +92,11 @@ def test_function_message() -> None:
     assert data["name"] == "compute"
 
 
+def test_function_message_requires_name() -> None:
+    with pytest.raises(ValidationError):
+        FunctionMessage(content="ok")  # type: ignore[call-arg]
+
+
 def test_chat_message_custom_role() -> None:
     message = ChatMessage(content="内容", role="user-voice")
     assert message.type == "chat"
@@ -69,12 +109,17 @@ def test_message_with_name() -> None:
 
 
 def test_multimodal_content() -> None:
-    parts: list[dict[str, object]] = [
+    parts: list[TextContentPart | ImageContentPart | InputAudioContentPart | FileContentPart] = [
         {"type": "text", "text": "描述这张图"},
-        {"type": "image_url", "image_url": {"url": "https://example.com/pic.png"}},
+        {"type": "image_url", "image_url": {"url": "https://example.com/pic.png", "detail": "high"}},
     ]
     message = HumanMessage(content=parts)
     assert message.to_openai_dict()["content"] == parts
+
+
+def test_multimodal_content_validates_part_structure() -> None:
+    with pytest.raises(ValidationError):
+        HumanMessage(content=[{"type": "image_url", "image_url": {"detail": "high"}}])  # type: ignore[list-item]
 
 
 def test_to_openai_messages_mixed() -> None:

@@ -1,13 +1,9 @@
-"""chat.completions 资源（同步与异步）。
-
-``create`` 的入口参数与 openai SDK 的 ``client.chat.completions.create`` 一致，
-``messages`` 支持 langchain 风格消息（见 :mod:`openai_io.messages`）。
-"""
+"""Chat Completions 同步与异步资源。"""
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from typing import Any, Literal, overload
+from collections.abc import Iterable, Mapping
+from typing import Any, Literal, NotRequired, TypedDict, overload
 
 from ..._base_client import AsyncAPIClient, SyncAPIClient
 from ..._streaming import AsyncStream, Stream
@@ -17,6 +13,56 @@ from ...messages import MessageLike, to_openai_messages
 from ...types.chat import ChatCompletion, ChatCompletionChunk
 
 __all__ = ["AsyncChatCompletions", "ChatCompletions"]
+
+
+class StreamOptions(TypedDict):
+    include_usage: NotRequired[bool]
+    include_obfuscation: NotRequired[bool]
+
+
+type ToolChoice = Literal["none", "auto", "required"] | dict[str, Any]
+type FunctionCallOption = Literal["none", "auto"] | dict[str, Any]
+type ServiceTier = Literal["auto", "default", "flex", "scale", "priority", "fast"]
+type ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+_BODY_FIELDS = (
+    "model",
+    "messages",
+    "stream",
+    "stream_options",
+    "temperature",
+    "top_p",
+    "n",
+    "stop",
+    "max_tokens",
+    "max_completion_tokens",
+    "presence_penalty",
+    "frequency_penalty",
+    "logit_bias",
+    "logprobs",
+    "top_logprobs",
+    "user",
+    "tools",
+    "tool_choice",
+    "parallel_tool_calls",
+    "function_call",
+    "functions",
+    "response_format",
+    "seed",
+    "metadata",
+    "service_tier",
+    "reasoning_effort",
+)
+
+
+def _build_create_body(params: Mapping[str, Any]) -> dict[str, Any]:
+    body = {field: params[field] for field in _BODY_FIELDS}
+    body["messages"] = to_openai_messages(body["messages"])
+    for field in ("tools", "functions"):
+        value = body[field]
+        if not isinstance(value, NotGiven):
+            body[field] = list(value)
+    return remove_not_given(body)
 
 
 class ChatCompletions:
@@ -32,7 +78,7 @@ class ChatCompletions:
         model: str,
         messages: Iterable[MessageLike],
         stream: Literal[True],
-        stream_options: dict[str, Any] | NotGiven = NOT_GIVEN,
+        stream_options: StreamOptions | NotGiven | None = NOT_GIVEN,
         temperature: float | NotGiven = NOT_GIVEN,
         top_p: float | NotGiven = NOT_GIVEN,
         n: int | NotGiven = NOT_GIVEN,
@@ -46,15 +92,15 @@ class ChatCompletions:
         top_logprobs: int | NotGiven = NOT_GIVEN,
         user: str | NotGiven = NOT_GIVEN,
         tools: Iterable[dict[str, Any]] | NotGiven = NOT_GIVEN,
-        tool_choice: str | dict[str, Any] | NotGiven = NOT_GIVEN,
+        tool_choice: ToolChoice | NotGiven = NOT_GIVEN,
         parallel_tool_calls: bool | NotGiven = NOT_GIVEN,
-        function_call: str | dict[str, Any] | NotGiven = NOT_GIVEN,
+        function_call: FunctionCallOption | NotGiven = NOT_GIVEN,
         functions: Iterable[dict[str, Any]] | NotGiven = NOT_GIVEN,
         response_format: dict[str, Any] | NotGiven = NOT_GIVEN,
         seed: int | NotGiven = NOT_GIVEN,
-        metadata: dict[str, Any] | NotGiven = NOT_GIVEN,
-        service_tier: str | NotGiven = NOT_GIVEN,
-        reasoning_effort: str | NotGiven = NOT_GIVEN,
+        metadata: dict[str, str] | NotGiven | None = NOT_GIVEN,
+        service_tier: ServiceTier | NotGiven | None = NOT_GIVEN,
+        reasoning_effort: ReasoningEffort | NotGiven | None = NOT_GIVEN,
     ) -> Stream[ChatCompletionChunk]: ...
 
     @overload
@@ -64,7 +110,7 @@ class ChatCompletions:
         model: str,
         messages: Iterable[MessageLike],
         stream: Literal[False] | None = None,
-        stream_options: dict[str, Any] | NotGiven = NOT_GIVEN,
+        stream_options: StreamOptions | NotGiven | None = NOT_GIVEN,
         temperature: float | NotGiven = NOT_GIVEN,
         top_p: float | NotGiven = NOT_GIVEN,
         n: int | NotGiven = NOT_GIVEN,
@@ -78,15 +124,15 @@ class ChatCompletions:
         top_logprobs: int | NotGiven = NOT_GIVEN,
         user: str | NotGiven = NOT_GIVEN,
         tools: Iterable[dict[str, Any]] | NotGiven = NOT_GIVEN,
-        tool_choice: str | dict[str, Any] | NotGiven = NOT_GIVEN,
+        tool_choice: ToolChoice | NotGiven = NOT_GIVEN,
         parallel_tool_calls: bool | NotGiven = NOT_GIVEN,
-        function_call: str | dict[str, Any] | NotGiven = NOT_GIVEN,
+        function_call: FunctionCallOption | NotGiven = NOT_GIVEN,
         functions: Iterable[dict[str, Any]] | NotGiven = NOT_GIVEN,
         response_format: dict[str, Any] | NotGiven = NOT_GIVEN,
         seed: int | NotGiven = NOT_GIVEN,
-        metadata: dict[str, Any] | NotGiven = NOT_GIVEN,
-        service_tier: str | NotGiven = NOT_GIVEN,
-        reasoning_effort: str | NotGiven = NOT_GIVEN,
+        metadata: dict[str, str] | NotGiven | None = NOT_GIVEN,
+        service_tier: ServiceTier | NotGiven | None = NOT_GIVEN,
+        reasoning_effort: ReasoningEffort | NotGiven | None = NOT_GIVEN,
     ) -> ChatCompletion: ...
 
     def create(
@@ -95,7 +141,7 @@ class ChatCompletions:
         model: str,
         messages: Iterable[MessageLike],
         stream: bool | NotGiven | None = NOT_GIVEN,
-        stream_options: dict[str, Any] | NotGiven = NOT_GIVEN,
+        stream_options: StreamOptions | NotGiven | None = NOT_GIVEN,
         temperature: float | NotGiven = NOT_GIVEN,
         top_p: float | NotGiven = NOT_GIVEN,
         n: int | NotGiven = NOT_GIVEN,
@@ -109,46 +155,17 @@ class ChatCompletions:
         top_logprobs: int | NotGiven = NOT_GIVEN,
         user: str | NotGiven = NOT_GIVEN,
         tools: Iterable[dict[str, Any]] | NotGiven = NOT_GIVEN,
-        tool_choice: str | dict[str, Any] | NotGiven = NOT_GIVEN,
+        tool_choice: ToolChoice | NotGiven = NOT_GIVEN,
         parallel_tool_calls: bool | NotGiven = NOT_GIVEN,
-        function_call: str | dict[str, Any] | NotGiven = NOT_GIVEN,
+        function_call: FunctionCallOption | NotGiven = NOT_GIVEN,
         functions: Iterable[dict[str, Any]] | NotGiven = NOT_GIVEN,
         response_format: dict[str, Any] | NotGiven = NOT_GIVEN,
         seed: int | NotGiven = NOT_GIVEN,
-        metadata: dict[str, Any] | NotGiven = NOT_GIVEN,
-        service_tier: str | NotGiven = NOT_GIVEN,
-        reasoning_effort: str | NotGiven = NOT_GIVEN,
+        metadata: dict[str, str] | NotGiven | None = NOT_GIVEN,
+        service_tier: ServiceTier | NotGiven | None = NOT_GIVEN,
+        reasoning_effort: ReasoningEffort | NotGiven | None = NOT_GIVEN,
     ) -> Stream[ChatCompletionChunk] | ChatCompletion:
-        body = remove_not_given(
-            {
-                "model": model,
-                "messages": to_openai_messages(messages),
-                "stream": stream,
-                "stream_options": stream_options,
-                "temperature": temperature,
-                "top_p": top_p,
-                "n": n,
-                "stop": stop,
-                "max_tokens": max_tokens,
-                "max_completion_tokens": max_completion_tokens,
-                "presence_penalty": presence_penalty,
-                "frequency_penalty": frequency_penalty,
-                "logit_bias": logit_bias,
-                "logprobs": logprobs,
-                "top_logprobs": top_logprobs,
-                "user": user,
-                "tools": list(tools) if not isinstance(tools, NotGiven) else tools,
-                "tool_choice": tool_choice,
-                "parallel_tool_calls": parallel_tool_calls,
-                "function_call": function_call,
-                "functions": list(functions) if not isinstance(functions, NotGiven) else functions,
-                "response_format": response_format,
-                "seed": seed,
-                "metadata": metadata,
-                "service_tier": service_tier,
-                "reasoning_effort": reasoning_effort,
-            }
-        )
+        body = _build_create_body(locals())
         if stream is True:
             response = self._client.stream("post", "/chat/completions", json_body=body)
             return Stream(cast_to=ChatCompletionChunk, response=response)
@@ -169,7 +186,7 @@ class AsyncChatCompletions:
         model: str,
         messages: Iterable[MessageLike],
         stream: Literal[True],
-        stream_options: dict[str, Any] | NotGiven = NOT_GIVEN,
+        stream_options: StreamOptions | NotGiven | None = NOT_GIVEN,
         temperature: float | NotGiven = NOT_GIVEN,
         top_p: float | NotGiven = NOT_GIVEN,
         n: int | NotGiven = NOT_GIVEN,
@@ -183,15 +200,15 @@ class AsyncChatCompletions:
         top_logprobs: int | NotGiven = NOT_GIVEN,
         user: str | NotGiven = NOT_GIVEN,
         tools: Iterable[dict[str, Any]] | NotGiven = NOT_GIVEN,
-        tool_choice: str | dict[str, Any] | NotGiven = NOT_GIVEN,
+        tool_choice: ToolChoice | NotGiven = NOT_GIVEN,
         parallel_tool_calls: bool | NotGiven = NOT_GIVEN,
-        function_call: str | dict[str, Any] | NotGiven = NOT_GIVEN,
+        function_call: FunctionCallOption | NotGiven = NOT_GIVEN,
         functions: Iterable[dict[str, Any]] | NotGiven = NOT_GIVEN,
         response_format: dict[str, Any] | NotGiven = NOT_GIVEN,
         seed: int | NotGiven = NOT_GIVEN,
-        metadata: dict[str, Any] | NotGiven = NOT_GIVEN,
-        service_tier: str | NotGiven = NOT_GIVEN,
-        reasoning_effort: str | NotGiven = NOT_GIVEN,
+        metadata: dict[str, str] | NotGiven | None = NOT_GIVEN,
+        service_tier: ServiceTier | NotGiven | None = NOT_GIVEN,
+        reasoning_effort: ReasoningEffort | NotGiven | None = NOT_GIVEN,
     ) -> AsyncStream[ChatCompletionChunk]: ...
 
     @overload
@@ -201,7 +218,7 @@ class AsyncChatCompletions:
         model: str,
         messages: Iterable[MessageLike],
         stream: Literal[False] | None = None,
-        stream_options: dict[str, Any] | NotGiven = NOT_GIVEN,
+        stream_options: StreamOptions | NotGiven | None = NOT_GIVEN,
         temperature: float | NotGiven = NOT_GIVEN,
         top_p: float | NotGiven = NOT_GIVEN,
         n: int | NotGiven = NOT_GIVEN,
@@ -215,15 +232,15 @@ class AsyncChatCompletions:
         top_logprobs: int | NotGiven = NOT_GIVEN,
         user: str | NotGiven = NOT_GIVEN,
         tools: Iterable[dict[str, Any]] | NotGiven = NOT_GIVEN,
-        tool_choice: str | dict[str, Any] | NotGiven = NOT_GIVEN,
+        tool_choice: ToolChoice | NotGiven = NOT_GIVEN,
         parallel_tool_calls: bool | NotGiven = NOT_GIVEN,
-        function_call: str | dict[str, Any] | NotGiven = NOT_GIVEN,
+        function_call: FunctionCallOption | NotGiven = NOT_GIVEN,
         functions: Iterable[dict[str, Any]] | NotGiven = NOT_GIVEN,
         response_format: dict[str, Any] | NotGiven = NOT_GIVEN,
         seed: int | NotGiven = NOT_GIVEN,
-        metadata: dict[str, Any] | NotGiven = NOT_GIVEN,
-        service_tier: str | NotGiven = NOT_GIVEN,
-        reasoning_effort: str | NotGiven = NOT_GIVEN,
+        metadata: dict[str, str] | NotGiven | None = NOT_GIVEN,
+        service_tier: ServiceTier | NotGiven | None = NOT_GIVEN,
+        reasoning_effort: ReasoningEffort | NotGiven | None = NOT_GIVEN,
     ) -> ChatCompletion: ...
 
     async def create(
@@ -232,7 +249,7 @@ class AsyncChatCompletions:
         model: str,
         messages: Iterable[MessageLike],
         stream: bool | NotGiven | None = NOT_GIVEN,
-        stream_options: dict[str, Any] | NotGiven = NOT_GIVEN,
+        stream_options: StreamOptions | NotGiven | None = NOT_GIVEN,
         temperature: float | NotGiven = NOT_GIVEN,
         top_p: float | NotGiven = NOT_GIVEN,
         n: int | NotGiven = NOT_GIVEN,
@@ -246,46 +263,17 @@ class AsyncChatCompletions:
         top_logprobs: int | NotGiven = NOT_GIVEN,
         user: str | NotGiven = NOT_GIVEN,
         tools: Iterable[dict[str, Any]] | NotGiven = NOT_GIVEN,
-        tool_choice: str | dict[str, Any] | NotGiven = NOT_GIVEN,
+        tool_choice: ToolChoice | NotGiven = NOT_GIVEN,
         parallel_tool_calls: bool | NotGiven = NOT_GIVEN,
-        function_call: str | dict[str, Any] | NotGiven = NOT_GIVEN,
+        function_call: FunctionCallOption | NotGiven = NOT_GIVEN,
         functions: Iterable[dict[str, Any]] | NotGiven = NOT_GIVEN,
         response_format: dict[str, Any] | NotGiven = NOT_GIVEN,
         seed: int | NotGiven = NOT_GIVEN,
-        metadata: dict[str, Any] | NotGiven = NOT_GIVEN,
-        service_tier: str | NotGiven = NOT_GIVEN,
-        reasoning_effort: str | NotGiven = NOT_GIVEN,
+        metadata: dict[str, str] | NotGiven | None = NOT_GIVEN,
+        service_tier: ServiceTier | NotGiven | None = NOT_GIVEN,
+        reasoning_effort: ReasoningEffort | NotGiven | None = NOT_GIVEN,
     ) -> AsyncStream[ChatCompletionChunk] | ChatCompletion:
-        body = remove_not_given(
-            {
-                "model": model,
-                "messages": to_openai_messages(messages),
-                "stream": stream,
-                "stream_options": stream_options,
-                "temperature": temperature,
-                "top_p": top_p,
-                "n": n,
-                "stop": stop,
-                "max_tokens": max_tokens,
-                "max_completion_tokens": max_completion_tokens,
-                "presence_penalty": presence_penalty,
-                "frequency_penalty": frequency_penalty,
-                "logit_bias": logit_bias,
-                "logprobs": logprobs,
-                "top_logprobs": top_logprobs,
-                "user": user,
-                "tools": list(tools) if not isinstance(tools, NotGiven) else tools,
-                "tool_choice": tool_choice,
-                "parallel_tool_calls": parallel_tool_calls,
-                "function_call": function_call,
-                "functions": list(functions) if not isinstance(functions, NotGiven) else functions,
-                "response_format": response_format,
-                "seed": seed,
-                "metadata": metadata,
-                "service_tier": service_tier,
-                "reasoning_effort": reasoning_effort,
-            }
-        )
+        body = _build_create_body(locals())
         if stream is True:
             response = await self._client.stream("post", "/chat/completions", json_body=body)
             return AsyncStream(cast_to=ChatCompletionChunk, response=response)

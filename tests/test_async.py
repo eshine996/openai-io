@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 
 import httpx
 import pytest
 
-from openai_io import AsyncOpenAI, NotFoundError
+from openai_io import AsyncOpenAI, BadRequestError, NotFoundError
 from openai_io.messages import HumanMessage
 from tests.conftest import Handler
 
@@ -26,6 +26,11 @@ CHAT_RESPONSE = {
     ],
     "usage": {"prompt_tokens": 5, "completion_tokens": 4, "total_tokens": 9},
 }
+
+
+class AsyncStreamingErrorBody(httpx.AsyncByteStream):
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        yield b'{"error":{"message":"async stream request failed"}}'
 
 
 async def test_async_chat_completion_create(async_client: Callable[[Handler], AsyncOpenAI]) -> None:
@@ -103,6 +108,25 @@ async def test_async_error_mapping(async_client: Callable[[Handler], AsyncOpenAI
     client = async_client(handler)
     with pytest.raises(NotFoundError):
         await client.chat.completions.create(model="m", messages=[HumanMessage(content="hi")])
+
+
+async def test_async_streaming_http_error_is_mapped_and_closed() -> None:
+    responses: list[httpx.Response] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        response = httpx.Response(
+            400,
+            stream=AsyncStreamingErrorBody(),
+            headers={"content-type": "application/json"},
+        )
+        responses.append(response)
+        return response
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = AsyncOpenAI(api_key="test-key", max_retries=0, http_client=http_client)
+    with pytest.raises(BadRequestError, match="async stream request failed"):
+        await client.chat.completions.create(model="m", messages=[HumanMessage(content="hi")], stream=True)
+    assert responses[0].is_closed
 
 
 async def test_async_context_manager(async_client: Callable[[Handler], AsyncOpenAI]) -> None:

@@ -1,21 +1,4 @@
-"""openai-io：轻量级的 OpenAI 大模型 IO 库。
-
-只保留大模型 IO 三件套（chat completions / completions / embeddings），
-同步（:class:`OpenAI`）与异步（:class:`AsyncOpenAI`）双客户端，基于 httpx。
-消息体系采用 langchain 风格（见 :mod:`openai_io.messages`）。
-
-快速开始::
-
-    from openai_io import OpenAI
-    from openai_io.messages import HumanMessage
-
-    client = OpenAI()
-    resp = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[HumanMessage(content="你好")],
-    )
-    print(resp.choices[0].message.content)
-"""
+"""OpenAI Chat Completions、Completions 和 Embeddings 客户端。"""
 
 from __future__ import annotations
 
@@ -40,16 +23,33 @@ from .async_client import AsyncOpenAI
 from .client import OpenAI
 from .messages import (
     AIMessage,
+    AssistantMessageContent,
     BaseMessage,
     ChatMessage,
+    CustomTool,
+    CustomToolCall,
+    DeveloperMessage,
+    FileContentPart,
+    FileInput,
     FunctionCall,
     FunctionMessage,
     HumanMessage,
+    ImageContentPart,
+    ImageURL,
+    InputAudio,
+    InputAudioContentPart,
     MessageContent,
+    MessageContentPart,
     MessageLike,
+    MessageToolCall,
+    PromptCacheBreakpoint,
+    RefusalContentPart,
     SystemMessage,
+    TextContentPart,
+    TextMessageContent,
     ToolCall,
     ToolMessage,
+    UserMessageContent,
     to_openai_messages,
 )
 from .resources import (
@@ -88,6 +88,7 @@ __all__ = [
     "APIError",
     "APIStatusError",
     "APITimeoutError",
+    "AssistantMessageContent",
     "AsyncChat",
     "AsyncChatCompletions",
     "AsyncCompletions",
@@ -114,26 +115,42 @@ __all__ = [
     "Completions",
     "ConflictError",
     "CreateEmbeddingResponse",
+    "CustomTool",
+    "CustomToolCall",
+    "DeveloperMessage",
     "Embedding",
     "EmbeddingUsage",
     "Embeddings",
+    "FileContentPart",
+    "FileInput",
     "FunctionCall",
     "FunctionMessage",
     "HumanMessage",
+    "ImageContentPart",
+    "ImageURL",
+    "InputAudio",
+    "InputAudioContentPart",
     "InternalServerError",
     "MessageContent",
+    "MessageContentPart",
     "MessageLike",
+    "MessageToolCall",
     "NotFoundError",
     "NotGiven",
     "OpenAI",
     "OpenAIError",
     "PermissionDeniedError",
+    "PromptCacheBreakpoint",
     "RateLimitError",
+    "RefusalContentPart",
     "Stream",
     "SystemMessage",
+    "TextContentPart",
+    "TextMessageContent",
     "ToolCall",
     "ToolMessage",
     "UnprocessableEntityError",
+    "UserMessageContent",
     "__version__",
     "to_openai_messages",
 ]

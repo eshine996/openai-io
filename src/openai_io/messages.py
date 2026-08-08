@@ -1,43 +1,123 @@
-"""langchain 风格的 message 体系（不依赖 langchain-core）。
-
-- :class:`BaseMessage` 抽象基类：``content`` / ``additional_kwargs`` /
-  ``response_metadata`` / ``name`` / ``id``；``type`` 为 ``ClassVar``（消息类别，
-  如 ``"human"`` / ``"ai"`` / ``"tool"``），``_role()`` 返回对应的 openai role。
-- 具体类型：``SystemMessage`` / ``HumanMessage`` / ``AIMessage`` /
-  ``ToolMessage`` / ``FunctionMessage`` / ``ChatMessage``。
-- :meth:`BaseMessage.to_openai_dict` 转 openai 请求格式；:func:`to_openai_messages`
-  接受 ``BaseMessage`` 与原始 ``dict`` 混合列表。
-"""
+"""Chat Completions 消息类型。"""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, NotRequired, Self, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 __all__ = [
     "AIMessage",
+    "AssistantMessageContent",
     "BaseMessage",
     "ChatMessage",
+    "CustomTool",
+    "CustomToolCall",
+    "DeveloperMessage",
+    "FileContentPart",
+    "FileInput",
     "FunctionCall",
     "FunctionMessage",
     "HumanMessage",
+    "ImageContentPart",
+    "ImageURL",
+    "InputAudio",
+    "InputAudioContentPart",
     "MessageContent",
+    "MessageContentPart",
     "MessageLike",
+    "MessageToolCall",
+    "PromptCacheBreakpoint",
+    "RefusalContentPart",
     "SystemMessage",
+    "TextContentPart",
+    "TextMessageContent",
     "ToolCall",
     "ToolMessage",
+    "UserMessageContent",
     "to_openai_messages",
 ]
 
-#: 消息内容：纯文本，或 openai 多模态 part 列表
-#: （如 ``[{"type": "text", "text": "..."}, {"type": "image_url", "image_url": {...}}]``）。
-type MessageContent = str | list[dict[str, Any]]
+
+class PromptCacheBreakpoint(TypedDict):
+    """可复用提示词前缀的显式边界。"""
+
+    mode: Literal["explicit"]
+
+
+class TextContentPart(TypedDict):
+    """文本内容 part。"""
+
+    type: Literal["text"]
+    text: str
+    prompt_cache_breakpoint: NotRequired[PromptCacheBreakpoint]
+
+
+class ImageURL(TypedDict):
+    """图片 URL 或 base64 data URL。"""
+
+    url: str
+    detail: NotRequired[Literal["auto", "low", "high"]]
+
+
+class ImageContentPart(TypedDict):
+    """图片输入 part。"""
+
+    type: Literal["image_url"]
+    image_url: ImageURL
+    prompt_cache_breakpoint: NotRequired[PromptCacheBreakpoint]
+
+
+class InputAudio(TypedDict):
+    """base64 编码的音频输入。"""
+
+    data: str
+    format: Literal["wav", "mp3"]
+
+
+class InputAudioContentPart(TypedDict):
+    """音频输入 part。"""
+
+    type: Literal["input_audio"]
+    input_audio: InputAudio
+    prompt_cache_breakpoint: NotRequired[PromptCacheBreakpoint]
+
+
+class FileInput(TypedDict):
+    """文件输入；使用 file_id，或同时提供 file_data 与 filename。"""
+
+    file_data: NotRequired[str]
+    file_id: NotRequired[str]
+    filename: NotRequired[str]
+
+
+class FileContentPart(TypedDict):
+    """文件输入 part。"""
+
+    type: Literal["file"]
+    file: FileInput
+    prompt_cache_breakpoint: NotRequired[PromptCacheBreakpoint]
+
+
+class RefusalContentPart(TypedDict):
+    """助手拒绝回答的内容 part。"""
+
+    type: Literal["refusal"]
+    refusal: str
+
+
+type MessageContentPart = (
+    TextContentPart | ImageContentPart | InputAudioContentPart | FileContentPart | RefusalContentPart
+)
+type UserMessageContent = str | list[TextContentPart | ImageContentPart | InputAudioContentPart | FileContentPart]
+type AssistantMessageContent = str | list[TextContentPart | RefusalContentPart] | None
+type TextMessageContent = str | list[TextContentPart]
+type MessageContent = str | list[MessageContentPart]
 
 #: create 接口 ``messages`` 参数接受的元素类型：langchain 风格消息或原始 dict。
-type MessageLike = BaseMessage | Mapping[str, Any]
+type MessageLike = BaseMessage[Any] | Mapping[str, Any]
 
 
 class FunctionCall(BaseModel):
@@ -48,27 +128,40 @@ class FunctionCall(BaseModel):
 
 
 class ToolCall(BaseModel):
-    """openai 格式的 tool call（chat.completions 响应与请求共用）。"""
+    """函数工具调用。"""
 
     id: str
-    type: str = "function"
+    type: Literal["function"] = "function"
     function: FunctionCall
 
 
-class BaseMessage(BaseModel, ABC):
-    """所有消息的抽象基类（langchain 风格）。
+class CustomTool(BaseModel):
+    """自定义工具调用内容。"""
 
-    实例化时 ``content`` 是第一个字段（pydantic 2.13 起构造参数为关键字形式）：
-    ``HumanMessage(content="你好")``。
-    """
+    name: str
+    input: str
 
-    content: MessageContent
+
+class CustomToolCall(BaseModel):
+    """自定义工具调用。"""
+
+    id: str
+    type: Literal["custom"] = "custom"
+    custom: CustomTool
+
+
+type MessageToolCall = ToolCall | CustomToolCall
+
+
+class BaseMessage[ContentT](BaseModel, ABC):
+    """所有消息的抽象基类。"""
+
+    content: ContentT
     additional_kwargs: dict[str, Any] = Field(default_factory=dict)
     response_metadata: dict[str, Any] = Field(default_factory=dict)
     name: str | None = None
     id: str | None = None
 
-    #: 消息类别标识（如 "human" / "ai" / "tool"）。
     type: ClassVar[str]
 
     @abstractmethod
@@ -91,7 +184,7 @@ class BaseMessage(BaseModel, ABC):
         return f"{self.type}: {content}"
 
 
-class SystemMessage(BaseMessage):
+class SystemMessage(BaseMessage[TextMessageContent]):
     """系统消息（role=system）。"""
 
     type: ClassVar[str] = "system"
@@ -100,7 +193,16 @@ class SystemMessage(BaseMessage):
         return "system"
 
 
-class HumanMessage(BaseMessage):
+class DeveloperMessage(BaseMessage[TextMessageContent]):
+    """开发者消息（role=developer）。"""
+
+    type: ClassVar[str] = "developer"
+
+    def _role(self) -> Literal["developer"]:
+        return "developer"
+
+
+class HumanMessage(BaseMessage[UserMessageContent]):
     """用户消息（role=user）。"""
 
     type: ClassVar[str] = "human"
@@ -109,10 +211,11 @@ class HumanMessage(BaseMessage):
         return "user"
 
 
-class AIMessage(BaseMessage):
+class AIMessage(BaseMessage[AssistantMessageContent]):
     """助手消息（role=assistant），可携带 tool_calls / function_call。"""
 
-    tool_calls: list[ToolCall] | None = None
+    content: AssistantMessageContent = None
+    tool_calls: list[MessageToolCall] | None = None
     function_call: FunctionCall | None = None
 
     type: ClassVar[str] = "ai"
@@ -129,11 +232,11 @@ class AIMessage(BaseMessage):
         return data
 
 
-class ToolMessage(BaseMessage):
+class ToolMessage(BaseMessage[TextMessageContent]):
     """工具执行结果消息（role=tool），需携带对应的 ``tool_call_id``。"""
 
-    tool_call_id: str | None = None
-    #: 工具返回的原始产物，仅本地使用，不会发送给 API。
+    tool_call_id: str
+    # 工具返回的原始产物只保留在本地。
     artifact: Any | None = None
 
     type: ClassVar[str] = "tool"
@@ -143,21 +246,26 @@ class ToolMessage(BaseMessage):
 
     def to_openai_dict(self) -> dict[str, Any]:
         data = super().to_openai_dict()
-        if self.tool_call_id is not None:
-            data["tool_call_id"] = self.tool_call_id
+        data["tool_call_id"] = self.tool_call_id
         return data
 
 
-class FunctionMessage(BaseMessage):
+class FunctionMessage(BaseMessage[str | None]):
     """旧版 function 调用结果消息（role=function）。"""
 
     type: ClassVar[str] = "function"
+
+    @model_validator(mode="after")
+    def _require_name(self) -> Self:
+        if self.name is None:
+            raise ValueError("function 消息必须提供 name")
+        return self
 
     def _role(self) -> Literal["function"]:
         return "function"
 
 
-class ChatMessage(BaseMessage):
+class ChatMessage(BaseMessage[MessageContent]):
     """自定义 role 的消息，role 由调用方指定。"""
 
     role: str = Field(...)
@@ -179,6 +287,5 @@ def to_openai_messages(messages: Iterable[MessageLike]) -> list[dict[str, Any]]:
         if isinstance(message, BaseMessage):
             result.append(message.to_openai_dict())
         else:
-            # 直接转 dict：非法输入会在 dict() 时报错
             result.append(dict(message))
     return result
