@@ -1,2 +1,145 @@
 # openai-io
-openai接口的io库
+
+轻量级的 OpenAI 大模型 IO 库：只保留 `chat.completions` / `completions` / `embeddings`
+三件套，同步（`OpenAI`）与异步（`AsyncOpenAI`）双客户端，传输层基于 `httpx`，
+数据模型基于 `pydantic` v2。
+
+设计目标：**接口与 openai SDK 对齐以降低迁移成本，同时把 message 换成 langchain 风格**。
+
+## 特性
+
+- 🪶 轻量：仅依赖 `httpx` + `pydantic`，无其他重量级依赖
+- 🔀 同步 / 异步双客户端（`OpenAI` / `AsyncOpenAI`）
+- 💬 langchain 风格的 message 体系：`SystemMessage` / `HumanMessage` / `AIMessage` /
+  `ToolMessage` / `FunctionMessage` / `ChatMessage`（自研轻量实现，不依赖 langchain-core）
+- 🧵 流式输出（SSE）：`stream=True` 返回 `Stream` / `AsyncStream` 迭代器
+- 🛡️ 完整类型注解：`pyright --strict` 0 错误，`ruff` 全绿
+- 🔁 自动重试（指数退避 + 抖动）、异常体系与 openai SDK 一致
+
+## 安装
+
+```bash
+pip install -e .
+```
+
+要求 Python >= 3.12。
+
+## 快速开始
+
+### 同步
+
+```python
+from openai_io import OpenAI
+from openai_io.messages import HumanMessage, SystemMessage
+
+client = OpenAI()  # 或 OpenAI(api_key="sk-...")
+
+resp = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[
+        SystemMessage(content="你是一个友好的助手"),
+        HumanMessage(content="你好"),
+    ],
+)
+print(resp.choices[0].message.content)
+
+# embeddings
+vectors = client.embeddings.create(model="text-embedding-3-small", input="你好")
+print(vectors.data[0].embedding[:5])
+
+# 旧版文本补全
+comp = client.completions.create(model="gpt-3.5-turbo-instruct", prompt="1+1=?")
+print(comp.choices[0].text)
+```
+
+### 异步
+
+```python
+import asyncio
+
+from openai_io import AsyncOpenAI
+from openai_io.messages import HumanMessage
+
+async def main() -> None:
+    client = AsyncOpenAI()
+    resp = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[HumanMessage(content="你好")],
+    )
+    print(resp.choices[0].message.content)
+
+asyncio.run(main())
+```
+
+### 流式输出
+
+```python
+stream = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[HumanMessage(content="讲个故事")],
+    stream=True,
+)
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        print(delta, end="")
+```
+
+异步流式使用 `async for chunk in await client.chat.completions.create(..., stream=True)`。
+
+## Message 体系（与原生 openai 的差异）
+
+原生 openai SDK 的 messages 参数是 TypedDict 风格（`{"role": ..., "content": ...}`），
+本库改为 langchain 风格的类：
+
+```python
+from openai_io import AIMessage, FunctionCall, HumanMessage, SystemMessage, ToolCall, ToolMessage
+
+messages = [
+    SystemMessage(content="你是助手"),
+    HumanMessage(content="北京天气如何？"),
+    AIMessage(
+        content=None,
+        tool_calls=[ToolCall(id="call_1", function=FunctionCall(name="get_weather", arguments='{"city": "北京"}'))],
+    ),
+    ToolMessage(content="晴，25°C", tool_call_id="call_1"),
+]
+```
+
+- `BaseMessage` 抽象基类：`content` / `additional_kwargs` / `response_metadata` /
+  `name` / `id`，`type` 为类别标识（`"human"` / `"ai"` / `"tool"` …）
+- `content` 支持多模态 part 列表（`[{"type": "text", ...}, {"type": "image_url", ...}]`）
+- **兼容原始 dict**：`messages` 可以混合传入 `BaseMessage` 与 `{"role": ..., "content": ...}`，
+  迁移时无需一次性替换全部代码
+- pydantic 2.13 起构造参数为关键字形式：`HumanMessage(content="你好")`
+
+## 与 openai SDK 的对应关系
+
+| openai SDK | openai-io |
+| --- | --- |
+| `from openai import OpenAI` | `from openai_io import OpenAI` |
+| `client.chat.completions.create(...)` | `client.chat.completions.create(...)` |
+| `client.completions.create(...)` | `client.completions.create(...)` |
+| `client.embeddings.create(...)` | `client.embeddings.create(...)` |
+| `from openai import AsyncOpenAI` | `from openai_io import AsyncOpenAI` |
+| `openai.OpenAIError` 等异常 | `openai_io.OpenAIError` 等，类名一致 |
+| 请求参数（`temperature` / `max_tokens` / `tools` / …） | 同名同语义；未传参不写入请求体（`NotGiven` 哨兵语义一致） |
+| TypedDict messages | langchain 风格 `BaseMessage`（也可传 dict） |
+
+`create` 的入口参数与 openai SDK 对齐，含 `stream` / `stream_options` / `tools` /
+`tool_choice` / `response_format` / `seed` 等；未显式传参的字段不会出现在请求体中。
+
+## 开发
+
+```bash
+uv sync --extra dev
+uv run ruff check src tests && uv run ruff format --check src tests
+uv run pyright
+uv run pytest
+```
+
+测试使用 `httpx.MockTransport` 注入 mock 响应，无需真实 API key。
+
+## 许可证
+
+Apache-2.0
