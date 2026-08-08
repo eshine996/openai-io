@@ -23,7 +23,7 @@
 - 轻量：只依赖 `httpx` 和 `pydantic`
 - 同步 `OpenAI` 与异步 `AsyncOpenAI` 双客户端
 - langchain 风格 message：`SystemMessage` / `HumanMessage` / `AIMessage` /
-  `ToolMessage` / `FunctionMessage` / `ChatMessage`（自研实现，不依赖 langchain-core）
+  `ToolMessage` / `FunctionMessage` / `ChatMessage`（不依赖 langchain-core）
 - 流式输出（SSE）：`stream=True` 返回可迭代的 `Stream` / `AsyncStream`
 - 异常体系与 openai SDK 对齐，自动重试（指数退避 + 抖动）
 
