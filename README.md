@@ -4,7 +4,19 @@
 三件套，同步（`OpenAI`）与异步（`AsyncOpenAI`）双客户端，传输层基于 `httpx`，
 数据模型基于 `pydantic` v2。
 
-设计目标：**接口与 openai SDK 对齐以降低迁移成本，同时把 message 换成 langchain 风格**。
+## 为什么不用官方 SDK
+
+官方 SDK 功能全，但用起来有几处不太顺手：
+
+- 太重。模型 IO 只占它的一小部分，`images`、`audio`、`files`、`batch`、`assistants`
+  这些资源平时根本用不到，依赖和包体积都跟着上去了。
+- `messages` 是 TypedDict，`{"role": "user", "content": "..."}` 全靠手写，没有对象、
+  没有自动补全，多轮对话拼起来很啰嗦。
+- 类型太绕：`NotGiven` 哨兵、一长串 Union、各种 `*_Param`，IDE 提示经常是几行
+  联合类型，报错也不好读。
+
+这个库只做 chat / completions / embeddings 三件事，`messages` 换成 langchain 风格的
+对象，接口和官方 SDK 保持一致，迁移成本低。
 
 ## 特性
 
